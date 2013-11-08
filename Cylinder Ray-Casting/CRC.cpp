@@ -166,6 +166,22 @@ public:
 		F0 = ((n - Color(1, 1, 1))*(n - Color(1, 1, 1)) + kd*kd) / ((n + Color(1, 1, 1))*(n + Color(1, 1, 1)) + kd*kd);
 	}
 
+	//returns reflected radiance for rough surfaces
+	Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){
+		//all vectors are assumed to be normalized
+		//x: hit point
+		//L: from x to light source
+		//N: surface normal
+		//V: from x to eye
+		//Lin: incoming radiance from ray
+
+		double costheta = N*L;
+		if (costheta < 0)
+			return Color(0, 0, 0);
+		Color Lref = Lin*kd*costheta;
+		return Lref;
+	}
+
 	//sets reflection direction to R
 	Vector reflectionDirection(Vector& N, Vector& V){
 		Vector R;
@@ -207,9 +223,9 @@ protected:
 public:
 	Object(Material material) :material(material){}
 	//calculates the parameter at which the ray is intersecting the object
-	virtual Hit intersect(Ray) = 0;
+	virtual Hit intersect(Ray&) = 0;
 	//returns the normal vector of the surface at a given point
-	virtual Vector surfaceNormal(Point) = 0;
+	virtual Vector surfaceNormal(Point&) = 0;
 	//returns the smaller positive number
 	double selectSmallerPositive(double t1, double t2){
 		double t;
@@ -251,16 +267,16 @@ public:
 			return selectSmallerPositive(t1, t2);
 		}
 	}
-	virtual Color kd(Point){
+	virtual Color kd(Point&){
 		return material.getBRDFFactor();
 	}
-	Color Fresnel(Vector incomingDirection, Vector surfaceNormal){
+	Color Fresnel(Vector& incomingDirection, Vector& surfaceNormal){
 		return material.Fresnel(incomingDirection, surfaceNormal);
 	}
 	bool isReflective(){
 		return material.getReflectiveProperty();
 	}
-	Ray reflect(Ray ray, Point hitPoint){
+	Ray reflect(Ray& ray, Point& hitPoint){
 		Vector normal = surfaceNormal(hitPoint);
 		Vector reflectionDirection = material.reflectionDirection(normal, ray.direction);
 		return Ray(hitPoint, reflectionDirection);
@@ -307,7 +323,7 @@ public:
 		return Hit(ray, NULL, -1.0, Point(0, 0, 0), Vector(0, 0, 0));
 	}
 
-	Hit intersect(Ray ray){
+	Hit intersect(Ray& ray){
 		/*
 		C => -R^2-((eye-r0).a)^2+(eye-r0).(eye-r0)
 		B => t (2 (eye-r0).v-2 (eye-r0).a v.a)
@@ -370,7 +386,7 @@ public:
 		return Hit(ray, NULL, -1.0, Point(0, 0, 0), Vector(0, 0, 0));
 	}
 
-	virtual Vector surfaceNormal(Point surfacePoint) = 0;
+	virtual Vector surfaceNormal(Point& surfacePoint) = 0;
 };
 
 class ObjectCylinder : public Cylinder{
@@ -378,7 +394,7 @@ public:
 	ObjectCylinder(Material material, Point position, Vector direction, double height, double radius) :
 		Cylinder(material, position, direction, height, radius){}
 
-	Vector surfaceNormal(Point surfacePoint){
+	Vector surfaceNormal(Point& surfacePoint){
 		Point r0 = referencePoint;
 		Point r = surfacePoint;
 		Vector a = standDirection;
@@ -402,14 +418,14 @@ public:
 	ContainerCylinder(Material material, Material bottomMaterial, Point position, Vector direction, double height, double radius):
 		Cylinder(material, position, direction, height, radius), bottomMaterial(bottomMaterial){}
 
-	Color kd(Point p){
+	Color kd(Point& p){
 		if ((p - referencePoint).Length() < radius - EPSILON)
 			return bottomMaterial.getBRDFFactor();
 		else
 			return Object::kd(p);
 	}
 
-	Vector surfaceNormal(Point surfacePoint){
+	Vector surfaceNormal(Point& surfacePoint){
 		Point r0 = referencePoint;
 		Point r = surfacePoint;
 		Vector a = standDirection;
@@ -433,7 +449,7 @@ public:
 	Paraboloid(Material material, Point position, Vector normal, double f, double length) :
 		Object(material), referencePoint(position), normal(normal), focusDistance(f), length(length){}
 
-	Hit intersect(Ray ray){
+	Hit intersect(Ray& ray){
 		/*
 		C => -(n.(eye - r0))^2 + (eye - f n - r0).(eye - f n - r0)
 		B => t (-2 n.(eye - r0) n.v + 2 v.(eye - f n - r0))
@@ -463,7 +479,7 @@ public:
 			return Hit(ray, NULL, -1.0, Point(0, 0, 0), Vector(0, 0, 0));
 	}
 
-	Vector surfaceNormal(Point surfacePoint){
+	Vector surfaceNormal(Point& surfacePoint){
 		Point r0 = referencePoint;
 		Point r = surfacePoint;
 		Vector n = normal;
@@ -482,11 +498,11 @@ public:
 
 	virtual Point getPosition() = 0;
 
-	virtual double getDistanceFromPoint(Point) = 0;
+	virtual double getDistanceFromPoint(Point&) = 0;
 
-	virtual Vector getDirectionFromPoint(Point) = 0;
+	virtual Vector getDirectionFromPoint(Point&) = 0;
 
-	virtual Color getRadianceTo(Point) = 0;
+	virtual Color getRadianceTo(Point&) = 0;
 };
 
 class PositionalLight : public Light{
@@ -499,13 +515,13 @@ public:
 		return position;
 	}
 
-	double getDistanceFromPoint(Point point){
+	double getDistanceFromPoint(Point& point){
 		return (point - position).Length();
 	}
-	Vector getDirectionFromPoint(Point point){
+	Vector getDirectionFromPoint(Point& point){
 		return (position - point).normalized();
 	}
-	Color getRadianceTo(Point point){
+	Color getRadianceTo(Point& point){
 		//the intensity is inversely proportional to the distance
 		return intensity / pow((point-position).Length(),2);
 	}
@@ -521,13 +537,13 @@ public:
 		return Point(0, height, 0);
 	}
 
-	double getDistanceFromPoint(Point point){
+	double getDistanceFromPoint(Point& point){
 		return fabs(height - point.y);
 	}
-	Vector getDirectionFromPoint(Point point){
+	Vector getDirectionFromPoint(Point& point){
 		return Vector(0, 1, 0);
 	}
-	Color getRadianceTo(Point point){
+	Color getRadianceTo(Point& point){
 		//constant intensity to everywhere
 		return intensity;
 	}
