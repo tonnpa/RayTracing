@@ -660,7 +660,7 @@ public:
 					Vector V = rayToPoint.direction*(-1.0);
 					Vector L = shadowRay.direction;
 					Color Lin = lightSources[i]->getRadianceTo(x);
-					color += hit.iObject->reflectedRadiance(L, N, V, Lin);
+					color += hit.iObject->kd(x)*hit.iObject->reflectedRadiance(L, N, V, Lin);
 				}
 			}
 		}
