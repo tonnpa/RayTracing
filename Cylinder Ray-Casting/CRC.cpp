@@ -100,13 +100,6 @@ struct Vector {
 		float length = this->Length();
 		return Vector(x /= length, y /= length, z /= length);
 	}
-	double positiveDotProduct(const Vector& v){ //returns positive dot product
-		double result = (*this)*v;
-		if (result > 0)
-			return result;
-		else
-			return 0;
-	}
 };
 
 typedef Vector Point;
@@ -157,13 +150,51 @@ class Material{
 	//type
 	Color F0;	//Fresnel approximation constant
 	Color n;	//refractive index
-	Color kd;	//BRDF
+	Color k;	//extinction kappa
+	Color kd;	//diffuse BRDF
 
 	bool isReflective, isRefractive;
 public:
-	Material(Color n, Color kd, bool reflective, bool refractive)
-		:n(n), kd(kd), isReflective(reflective), isRefractive(refractive){
-		F0 = ((n - Color(1, 1, 1))*(n - Color(1, 1, 1)) + kd*kd) / ((n + Color(1, 1, 1))*(n + Color(1, 1, 1)) + kd*kd);
+	Material(Color n, Color k, bool reflective, bool refractive)
+		:isReflective(reflective), isRefractive(refractive){
+		//smooth surface
+		if (reflective || refractive){
+			this->k = k;
+			this->n = n;
+			F0 = ((n - Color(1, 1, 1))*(n - Color(1, 1, 1)) + k*k) / ((n + Color(1, 1, 1))*(n + Color(1, 1, 1)) + k*k);
+			kd = Color(0, 0, 0);
+		}
+		//rough surface
+		else{
+			F0 = k = n = Color(0, 0, 0);
+			kd = k;
+		}
+	}
+
+	bool getReflectiveProperty(){
+		return isReflective;
+	}
+
+	bool getDiffuseProperty(){
+		if (isReflective || isRefractive){
+			return false;
+		}
+		else
+			return true;
+	}
+
+	//sets reflection direction to R
+	Vector reflectionDirection(Vector& N, Vector& V){
+		Vector R;
+		double cosa = N*(-1.0)*V;
+		R = V + N*cosa * 2;
+		return R;
+	}
+
+	//returns reflected radiance for smooth surfaces
+	Color Fresnel(Vector& N, Vector& V){
+		double cosa = fabs(N*V);
+		return F0 + (Color(1, 1, 1) - F0)*pow(1 - cosa, 5);
 	}
 
 	//returns reflected radiance for rough surfaces
@@ -181,25 +212,8 @@ public:
 		Color Lref = Lin*kd*costheta;
 		return Lref;
 	}
-
-	//sets reflection direction to R
-	Vector reflectionDirection(Vector& N, Vector& V){
-		Vector R;
-		double cosa = N*(-1.0)*V;
-		R = V + N*cosa * 2;
-		return R;
-	}
-
-	//returns reflected radiance for smooth surfaces
-	Color Fresnel(Vector& N, Vector& V){
-		double cosa = fabs(N*V);
-		return F0 + (Color(1, 1, 1) - F0)*pow(1 - cosa, 5);
-	}
-	Color getBRDFFactor(){
+	Color getDiffuseBRDF(){
 		return kd;
-	}
-	bool getReflectiveProperty(){
-		return isReflective;
 	}
 };
 
@@ -268,13 +282,19 @@ public:
 		}
 	}
 	virtual Color kd(Point&){
-		return material.getBRDFFactor();
+		return material.getDiffuseBRDF();
 	}
 	Color Fresnel(Vector& incomingDirection, Vector& surfaceNormal){
 		return material.Fresnel(incomingDirection, surfaceNormal);
 	}
-	bool isReflective(){
+	Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){
+		return material.reflectedRadiance(L, N, V, Lin);
+	}
+	virtual bool isReflective(){
 		return material.getReflectiveProperty();
+	}
+	virtual bool isDiffuse(Point& point){
+		return material.getDiffuseProperty();
 	}
 	Ray reflect(Ray& ray, Point& hitPoint){
 		Vector normal = surfaceNormal(hitPoint);
@@ -420,9 +440,21 @@ public:
 
 	Color kd(Point& p){
 		if ((p - referencePoint).Length() < radius - EPSILON)
-			return bottomMaterial.getBRDFFactor();
+			return bottomMaterial.getDiffuseBRDF();
 		else
 			return Object::kd(p);
+	}
+
+	bool isDiffuse(Point& point){
+		Point r0 = referencePoint;
+		Point r = point;
+		Vector a = standDirection;
+
+		//bottom circle
+		if ((r - r0).Length() < radius - EPSILON)
+			return true;
+		else
+			return false;
 	}
 
 	Vector surfaceNormal(Point& surfacePoint){
@@ -609,6 +641,32 @@ public:
 			return Hit(ray, NULL, -1.0, Point(0, 0, 0), Vector(0, 0, 0));
 	}
 
+	Color directIllumination(Hit& hit){
+		Color color = ka*La;
+		Point x = hit.x;
+
+		if (hit.iObject->isDiffuse(x)){
+			Vector N = hit.iNormal;
+			Ray rayToPoint = hit.ray;
+			Ray shadowRay;
+
+			for (int i = 0; i < lightSourceCount; ++i){
+				shadowRay.origin = x;
+				//shadowRay.direction = (lightSources[i]->getPosition() - x).normalized(); //getDirectionFromPoint
+				shadowRay.direction = lightSources[i]->getDirectionFromPoint(x); //vector from point to light source
+				Hit shadowHit = intersectAll(shadowRay);
+				Point y = shadowHit.x;
+				if (shadowHit.t < 0 || (x - y).Length() > lightSources[i]->getDistanceFromPoint(x)){ //distance of point and light source
+					Vector V = rayToPoint.direction*(-1.0);
+					Vector L = shadowRay.direction;
+					Color Lin = lightSources[i]->getRadianceTo(x);
+					color += hit.iObject->reflectedRadiance(L, N, V, Lin);
+				}
+			}
+		}
+		return color;
+	}
+
 	Color trace(Ray rayToPixel, int depth=0){
 		if (depth > MAX_DEPTH){
 			return La;
@@ -616,23 +674,8 @@ public:
 		Hit hit = intersectAll(rayToPixel);
 		if (hit.t < 0)
 			return La;
-		Color color = ka*La;
-		Point x = hit.x;
-		Vector N = hit.iNormal;
 
-		Ray shadowRay;
-		for (int i = 0; i < lightSourceCount; ++i){
-			shadowRay.origin = x;
-			//shadowRay.direction = (lightSources[i]->getPosition() - x).normalized(); //getDirectionFromPoint
-			shadowRay.direction = lightSources[i]->getDirectionFromPoint(x); //vector from point to light source
-			Hit shadowHit = intersectAll(shadowRay);
-			Point y = shadowHit.x;
-			if (shadowHit.t < 0 || (x - y).Length() > lightSources[i]->getDistanceFromPoint(x)){ //distance of point and light source
-				Vector V = rayToPixel.direction*(-1.0);
-				Vector L = shadowRay.direction;
-				color += lightSources[i]->getRadianceTo(x)*hit.iObject->kd(x)*L.positiveDotProduct(N);
-			}
-		}
+		Color color = directIllumination(hit);
 
 		if (hit.iObject->isReflective()){
 			Ray reflectedRay = hit.iObject->reflect(rayToPixel, hit.x);
@@ -706,7 +749,7 @@ public:
 		//illumination
 		DirectionalLight* ceiling = new DirectionalLight(Color(0.5, 1.5, 2.55), 40);
 
-		PositionalLight* lightbulb = new PositionalLight(Color(150, 150, 150), lightPosition);
+		PositionalLight* lightbulb = new PositionalLight(Color(1000, 1000, 1000), lightPosition);
 
 		this->addLightSource(ceiling);
 		this->addLightSource(lightbulb);

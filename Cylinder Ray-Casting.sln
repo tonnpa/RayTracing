@@ -1,7 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2013
+VisualStudioVersion = 12.0.21005.1
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cylinder Ray-Casting", "Cylinder Ray-Casting\Cylinder Ray-Casting.vcxproj", "{63267DAD-A030-4D8C-8179-E3622D139B46}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Ray-Casting Remastered", "Ray-Casting Remastered\Ray-Casting Remastered.vcxproj", "{31E42DE7-82A0-4A11-B494-C7B10F6ACA87}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,6 +17,10 @@ Global
 		{63267DAD-A030-4D8C-8179-E3622D139B46}.Debug|Win32.Build.0 = Debug|Win32
 		{63267DAD-A030-4D8C-8179-E3622D139B46}.Release|Win32.ActiveCfg = Release|Win32
 		{63267DAD-A030-4D8C-8179-E3622D139B46}.Release|Win32.Build.0 = Release|Win32
+		{31E42DE7-82A0-4A11-B494-C7B10F6ACA87}.Debug|Win32.ActiveCfg = Debug|Win32
+		{31E42DE7-82A0-4A11-B494-C7B10F6ACA87}.Debug|Win32.Build.0 = Debug|Win32
+		{31E42DE7-82A0-4A11-B494-C7B10F6ACA87}.Release|Win32.ActiveCfg = Release|Win32
+		{31E42DE7-82A0-4A11-B494-C7B10F6ACA87}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
