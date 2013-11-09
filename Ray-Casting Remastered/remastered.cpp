@@ -95,6 +95,47 @@ struct Color {
 
 typedef Color Pixel;
 
+double selectSmallerPositive(double t1, double t2){
+	double t;
+	if (t1 < EPSILON)
+		t1 = -1.0;
+	if (t2 < EPSILON)
+		t2 = -1.0;
+	if (t1 < 0 && t2 < 0){
+		t = -1.0; //no hit point
+	}
+	else if (t1 > 0 && t2 < 0){
+		t = t1; //hits at t1
+	}
+	else if (t1 < 0 && t2 > 0){
+		t = t2; //hits at t2
+	}
+	else{
+		t = fmin(t1, t2);
+	}
+	return t;
+}
+
+double solveQuadraticEquation(double A, double B, double C){
+	//if (fabs(A) < EPSILON){
+	//	if (fabs(B) < EPSILON)
+	//		return -1;
+	//	else
+	//		return -C / B;
+	//}
+	double discriminant = B*B - 4 * A*C;
+	if (discriminant < 0)
+		return -1.0;
+	//there are solutions
+	else{
+		double t1, t2;
+		t1 = (-B + sqrt(discriminant)) / 2 / A;
+		t2 = (-B - sqrt(discriminant)) / 2 / A;
+
+		return selectSmallerPositive(t1, t2);
+	}
+}
+
 struct Ray{
 	Point origin;
 	Vector direction;
@@ -220,7 +261,7 @@ public:
 	//returns the normal vector of the surface at a given point
 	virtual Vector surfaceNormal(Ray&, Point&) = 0;
 	//tells whether a point is part of the primitive
-	virtual bool containsPoint(Point& p) = 0;
+	//virtual bool containsPoint(Point& p) = 0;
 	//reflected radiance of diffuse materials
 	virtual Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){	
 		return material->reflectedRadiance(L, N, V, Lin);
@@ -263,11 +304,76 @@ public:
 		return cos < 0 ? normal : normal*(-1);
 	}
 
-	bool containsPoint(Point& point){
-		if ((point - center)*normal < EPSILON && (point - center).Length() < radius)
-			return true;
-		return false;
+	//bool containsPoint(Point& point){
+	//	if ((point - center)*normal < EPSILON && (point - center).Length() < radius)
+	//		return true;
+	//	return false;
+	//}
+};
+
+class CylinderSide : public Primitive{
+	Point r0;
+	Vector a;
+	double radius;
+	double height;
+
+public:
+	CylinderSide(Material* material, Point referencePoint, Vector standDirection, double radius, double height) :
+		Primitive(material), r0(referencePoint), radius(radius), height(height){
+		a = standDirection.normalized();
 	}
+	Hit intersect(Ray& ray){
+		Vector eye, v;
+		eye = ray.origin;
+		v = ray.direction;
+
+		double A, B, C;
+		A = v*v - pow(v*a, 2);
+		B = (eye - r0)*v * 2 - (eye - r0)*a *(v*a) * 2;
+		C = -pow(radius, 2) - pow((eye - r0)*a, 2) + (eye - r0)*(eye - r0);
+		double t = solveQuadraticEquation(A, B, C);
+		Vector r, normal;
+
+		if (t > EPSILON){
+			r = ray.origin + ray.direction*t;
+			if ((r - r0)*a < height && (r - r0)*a > 0){
+				normal = this->surfaceNormal(ray, r);
+			}
+			else
+				t = -1;
+		}
+		else
+			t = -1;
+
+		return Hit(ray, NULL, this, t, r, normal);
+	}
+
+	Vector surfaceNormal(Ray& ray, Point& r){
+		Point eye = ray.origin;
+		double t = (eye - r0)*a*(-1);
+		Point p = eye + a*t;
+
+		Vector axisPoint = r0 + a*((r - r0)*a);
+		Vector dir;
+
+		if ((p - r0).Length() > radius){
+			//outside
+			dir = r - axisPoint;
+		}
+		else
+			//inside
+			dir = axisPoint - r;
+		return dir.normalized();
+	}
+
+	//bool containsPoint(Point& r){
+	//	if ((r - r0)*a < height && (r - r0)*a > 0){
+	//		Vector axisPoint = r0 + a*((r - r0)*a);
+	//		if ((r - axisPoint).Length() - radius < EPSILON)
+	//			return true;
+	//	}
+	//	return false;
+	//}
 };
 
 class Object{
@@ -281,14 +387,6 @@ public:
 		if (primitiveCount < MAX_NUM_OF_OBJ){
 			primitives[primitiveCount] = newPrimitive;
 			primitiveCount++;
-		}
-	}
-
-	bool isDiffuse(Point& point){
-		bool found = false;
-		for (int i = 0; i < primitiveCount; ++i){
-			if (found = primitives[i]->containsPoint(point))
-				return primitives[i]->isDiffuse();
 		}
 	}
 
@@ -489,16 +587,20 @@ public:
 		SmoothMaterial* copper = new SmoothMaterial(false, true, false, Color(3.6, 2.6, 2.3), Color(0.2, 1.1, 1.2));
 
 		RoughMaterial* velvet = new RoughMaterial(true, false, false, Color(1, 0, 0));
+		RoughMaterial* forest = new RoughMaterial(true, false, false, Color(0, 1, 0));
+
 
 		//objects
 		Object* c = new Object();
-		Circle* circle = new Circle(velvet, Point(0, 0, 10), Vector(0, 0, 1), 2);
+		Circle* circle = new Circle(velvet, Point(-3, -5, 10), Vector(1, 1, 1), 2);
+		CylinderSide* cylinderSide = new CylinderSide(forest, Point(-3, -5, 10), Vector(1, 1, 1), 2, 7);
+		c->addPrimitive(cylinderSide);
 		c->addPrimitive(circle);
 
 		this->addObject(c);
 		//illumination
 		DirectionalLight* ceiling = new DirectionalLight(Color(0.5, 1.5, 2.55), 40);
-		PositionalLight* lightbulb = new PositionalLight(Color(1000, 1000, 1000), Point(0, 0, 20));
+		PositionalLight* lightbulb = new PositionalLight(Color(1000, 1000, 1000), Point(0, 0, 0));
 
 		//this->addLightSource(ceiling);
 		this->addLightSource(lightbulb);
