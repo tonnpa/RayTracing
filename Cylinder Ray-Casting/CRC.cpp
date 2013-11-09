@@ -155,11 +155,11 @@ class Material{
 
 	bool isReflective, isRefractive;
 public:
-	Material(Color n, Color k, bool reflective, bool refractive)
+	Material(Color n, Color kInput, bool reflective, bool refractive)
 		:isReflective(reflective), isRefractive(refractive){
 		//smooth surface
 		if (reflective || refractive){
-			this->k = k;
+			this->k = kInput;
 			this->n = n;
 			F0 = ((n - Color(1, 1, 1))*(n - Color(1, 1, 1)) + k*k) / ((n + Color(1, 1, 1))*(n + Color(1, 1, 1)) + k*k);
 			kd = Color(0, 0, 0);
@@ -167,7 +167,7 @@ public:
 		//rough surface
 		else{
 			F0 = k = n = Color(0, 0, 0);
-			kd = k;
+			kd = kInput;
 		}
 	}
 
@@ -287,7 +287,7 @@ public:
 	Color Fresnel(Vector& incomingDirection, Vector& surfaceNormal){
 		return material.Fresnel(incomingDirection, surfaceNormal);
 	}
-	Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){
+	virtual Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){
 		return material.reflectedRadiance(L, N, V, Lin);
 	}
 	virtual bool isReflective(){
@@ -469,6 +469,10 @@ public:
 		Vector axisPoint = r0 + a*((r - r0)*a);
 		Vector dir = r - axisPoint;
 		return dir.normalized()*(-1);
+	}
+
+	Color reflectedRadiance(Vector& L, Vector& N, Vector& V, Color Lin){
+		return bottomMaterial.reflectedRadiance(L, N, V, Lin);
 	}
 };
 
@@ -720,17 +724,17 @@ public:
 		Material gold = Material(Color(0.17, 0.35, 1.5), Color(3.1, 2.7, 1.9), true, false);
 		Material copper = Material(Color(3.6, 2.6, 2.3), Color(0.2, 1.1, 1.2), true, false);
 		Material silver = Material(Color(4.1, 2.3, 3.1), Color(0.14, 0.16, 0.13), true, false);
-		Material forest = Material(Color(1.7, 1.6, 1.8), Color(0, 1.2, .2), false, false);
-		Material ground = Material(Color(1.5, 1.5, 1.5), Color(0.5, 0.01, 0.01), false, false);
+		Material forest = Material(Color(0, 0, 0), Color(0, 1.2, .2), false, false);
+		Material ground = Material(Color(0, 0, 0), Color(0.5, 0.01, 0.01), false, false);
 
 		//view orientation
 		camera = Camera(lookAt, eye, up, right, screenWidth, screenHeight);
 
 		ObjectCylinder* cylinder = new ObjectCylinder(forest, Point(5, 0, 15), Vector(1, 1, -1).normalized(), 8, 1.5);
-		ObjectCylinder* cylinder2 = new ObjectCylinder(silver, Point(0, 0, 15), Vector(0, 1, 1).normalized(), 8, 1.5);
+		ObjectCylinder* cylinder2 = new ObjectCylinder(silver, Point(0, -5, 15), Vector(0, 1, 1).normalized(), 8, 1.5);
 		ObjectCylinder* cylinder3 = new ObjectCylinder(copper, Point(-5, 0, 15), Vector(-1, 1, -1).normalized(), 8, 1.5);
 
-		Point paraboloidPosition = Point(10, 25, 5);
+		Point paraboloidPosition = Point(0, 10, 15);
 		Vector paraboloidDirection = Vector(-1, -5, 1).normalized();
 
 		Point lightPosition = paraboloidPosition + paraboloidDirection*(2);
@@ -748,8 +752,8 @@ public:
 
 		//illumination
 		DirectionalLight* ceiling = new DirectionalLight(Color(0.5, 1.5, 2.55), 40);
-
-		PositionalLight* lightbulb = new PositionalLight(Color(1000, 1000, 1000), lightPosition);
+		PositionalLight* lightbulb = new PositionalLight(Color(2000, 2000, 2000), lightPosition);
+		//PositionalLight* lightbulb = new PositionalLight(Color(1000, 1000, 1000), Point(0,0,0));
 
 		this->addLightSource(ceiling);
 		this->addLightSource(lightbulb);
